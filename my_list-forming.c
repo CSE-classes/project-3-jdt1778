@@ -3,6 +3,10 @@
   Each thread generates a data node, attaches it to a global list. This is reapeated for K times.
   There are num_threads threads. The value of "num_threads" is input by the student.
 */
+// Removed while(1) loop, because it had busy-wait characteristics, which was consuming a lot of CPU.
+// Created local nodes to reduce runtime of pointers calling different addresses, and reduces the time
+// consumed while in the critical region.
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -59,7 +63,10 @@ void * producer_thread( void *arg)
     bind_thread_to_cpu(*((int*)arg));//bind this thread to a CPU
 
     struct Node * ptr, tmp;
-    int counter = 0;  
+    int counter = 0;
+    
+    struct Node *local_head = NULL;
+    struct Node *local_tail = NULL;
 
     /* generate and attach K nodes to the global list */
     while( counter  < K )
@@ -70,19 +77,36 @@ void * producer_thread( void *arg)
         {
             ptr->data  = 1;//generate data
     /* attache the generated node to the global list */
-            if( List->header == NULL )
+            if( local_head == NULL )
             {
-                List->header = List->tail = ptr;
+                local_head = local_tail = ptr;
             }
             else
             {
-                List->tail->next = ptr;
-                List->tail = ptr;
+                local_tail->next = ptr;
+                local_tail = ptr;
             }                    
-            pthread_mutex_unlock(&mutex_lock);         
+
         }
         ++counter;
     }
+
+    pthread_mutex_lock(&mutex_lock);
+
+    if(List->header == NULL)
+    {
+        List->header = local_head;
+        List->tail = local_tail;
+    }
+    else
+    {
+        List->tail->next = local_head;
+        List->tail = local_tail;
+    }
+
+    pthread_mutex_unlock(&mutex_lock);
+
+    pthread_exit(NULL);
 }
 
 int main(int argc, char* argv[])
